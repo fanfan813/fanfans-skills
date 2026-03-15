@@ -1,0 +1,9 @@
+[[sources]]
+id = "test-mysql"
+dsn = "mysql://testuser:testpass@localhost:3306/test_db"
+connection_timeout = 30
+
+[[sources]]
+id = "test-pg"
+dsn = "postgresql://testuser:testpass@localhost:5432/test_db"
+connection_timeout = 30
