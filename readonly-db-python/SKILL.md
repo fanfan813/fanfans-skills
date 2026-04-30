@@ -50,9 +50,9 @@ description: "当用户想要查询数据库数据、检查数据库或表、查
 
 ## 首选工作流 (Preferred Workflow)
 
-1. **发现连接源**：通过 `scripts/dbhub_sources.py` 读取 `dbhub.toml`。除非明确要求 `prod`，否则默认使用 `test` 环境。
+1. **发现连接源**：通过 `scripts/dbhub_sources.py` 读取 `dbhub.properties`。除非明确要求 `prod`，否则默认使用 `test` 环境。
 2. **连接预检**：在执行长查询或复杂查询前验证连通性。
-3. **引擎识别**：检查 `dsn` 或显式的 `engine` 字段以适配 SQL 语法（MySQL vs PostgreSQL）。
+3. **引擎识别**：检查显式的 `engine` 字段以适配 SQL 语法（MySQL vs PostgreSQL）。
 4. **安全验证**：在任何执行前，务必运行 `scripts/sql_guard.py`。
 5. **智能查询**：
    - **默认 LIMIT**：如果未指定 limit，务必加上 `LIMIT 100`（执行聚合操作如 `COUNT(*)` 时除外）。
@@ -62,13 +62,13 @@ description: "当用户想要查询数据库数据、检查数据库或表、查
 
 ## 连接源处理
 
-优先使用当前工作区根目录下的 `dbhub.toml`。
+优先使用当前工作区根目录下的 `dbhub.properties`。
 
 ```bash
-python scripts/dbhub_sources.py --path dbhub.toml
+python scripts/dbhub_sources.py --path dbhub.properties
 ```
 
-- 如果缺少 `dbhub.toml`，请报告缺失，不要进行递归目录扫描。
+- 如果缺少 `dbhub.properties`，请报告缺失，不要进行递归目录扫描。
 - 将 `prod` 视为高敏感度；如果上下文模糊，请与用户确认。
 
 ## 工具策略 (Tool Strategy)
@@ -84,9 +84,8 @@ python scripts/sql_guard.py --sql "SELECT ..."
 
 # 执行示例
 python scripts/run_readonly_query.py \
-  --dbhub-path dbhub.toml \
+  --dbhub-path dbhub.properties \
   --source-id test \
-  --timeout 30 \
   --sql "SELECT id, name FROM users LIMIT 10"
 ```
 

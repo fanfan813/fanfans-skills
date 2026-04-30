@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute a validated read-only query from a dbhub.toml source."""
+"""Execute a validated read-only query from a dbhub.properties source."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from dbhub_sources import load_sources, parse_dsn
+from dbhub_sources import load_sources, resolve_password
 from sql_guard import validate_sql
 
 
@@ -17,8 +17,12 @@ def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser."""
 
     parser = argparse.ArgumentParser(description="Run a read-only SQL query.")
-    parser.add_argument("--dbhub-path", required=True, help="Path to dbhub.toml")
-    parser.add_argument("--source-id", required=True, help="Source id in dbhub.toml")
+    parser.add_argument("--dbhub-path", required=True, help="Path to dbhub.properties")
+    parser.add_argument(
+        "--source-id",
+        required=True,
+        help="Source id in dbhub.properties, for example `test`",
+    )
     query_group = parser.add_mutually_exclusive_group(required=True)
     query_group.add_argument("--sql", help="Single read-only SQL statement")
     query_group.add_argument("--describe", help="Describe a table or view name")
@@ -79,15 +83,13 @@ def build_describe_sql(
 ) -> str:
     """Build engine-specific SQL for table structure inspection."""
 
-    dsn = str(source.get("dsn", ""))
-    parsed_dsn = parse_full_dsn(dsn)
-    scheme = parsed_dsn.get("scheme", "").lower()
+    engine = str(source.get("engine", "")).lower()
     table_name = validate_identifier(describe_target, "--describe")
 
-    if scheme in {"mysql", "mariadb"}:
+    if engine in {"mysql", "mariadb"}:
         return f"DESCRIBE `{table_name}`"
 
-    if scheme in {"postgres", "postgresql"}:
+    if engine in {"postgres", "postgresql"}:
         schema_name = validate_identifier(schema or "public", "--schema")
         return (
             "SELECT column_name, data_type, is_nullable, column_default "
@@ -97,10 +99,10 @@ def build_describe_sql(
             "ORDER BY ordinal_position"
         )
 
-    raise ValueError(f"Unsupported database scheme: {scheme or 'unknown'}")
+    raise ValueError(f"Unsupported database engine: {engine or 'unknown'}")
 
 
-def mysql_connect(parsed_dsn: dict[str, str], timeout_seconds: int) -> Any:
+def mysql_connect(source: dict[str, Any], timeout_seconds: int) -> Any:
     """Create a MySQL connection using PyMySQL."""
 
     try:
@@ -110,13 +112,12 @@ def mysql_connect(parsed_dsn: dict[str, str], timeout_seconds: int) -> Any:
             "PyMySQL is required for MySQL sources but is not installed."
         ) from exc
 
-    password = parsed_dsn.get("password", "")
     return pymysql.connect(
-        host=parsed_dsn.get("host") or "localhost",
-        port=int(parsed_dsn.get("port") or 3306),
-        user=parsed_dsn.get("username") or None,
-        password=password,
-        database=parsed_dsn.get("database") or None,
+        host=str(source.get("host") or "localhost"),
+        port=int(source.get("port") or 3306),
+        user=str(source.get("username") or "") or None,
+        password=resolve_password(source) or None,
+        database=str(source.get("database") or "") or None,
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
         connect_timeout=timeout_seconds,
@@ -126,7 +127,7 @@ def mysql_connect(parsed_dsn: dict[str, str], timeout_seconds: int) -> Any:
     )
 
 
-def postgres_connect(parsed_dsn: dict[str, str], timeout_seconds: int) -> Any:
+def postgres_connect(source: dict[str, Any], timeout_seconds: int) -> Any:
     """Create a PostgreSQL connection using psycopg."""
 
     try:
@@ -138,15 +139,16 @@ def postgres_connect(parsed_dsn: dict[str, str], timeout_seconds: int) -> Any:
         ) from exc
 
     conn = psycopg.connect(
-        host=parsed_dsn.get("host") or "localhost",
-        port=int(parsed_dsn.get("port") or 5432),
-        user=parsed_dsn.get("username") or None,
-        password=parsed_dsn.get("password") or None,
-        dbname=parsed_dsn.get("database") or None,
+        host=str(source.get("host") or "localhost"),
+        port=int(source.get("port") or 5432),
+        user=str(source.get("username") or "") or None,
+        password=resolve_password(source) or None,
+        dbname=str(source.get("database") or "") or None,
         connect_timeout=timeout_seconds,
         autocommit=True,
         row_factory=dict_row,
     )
+    # Force read-only at the session level to reduce risk from driver misuse.
     conn.execute("SET default_transaction_read_only = on")
     return conn
 
@@ -154,33 +156,14 @@ def postgres_connect(parsed_dsn: dict[str, str], timeout_seconds: int) -> Any:
 def connect(source: dict[str, Any]) -> Any:
     """Create a connection from a dbhub source definition."""
 
-    dsn = str(source.get("dsn", ""))
-    parsed_dsn = parse_full_dsn(dsn)
-    scheme = parsed_dsn.get("scheme", "").lower()
+    engine = str(source.get("engine", "")).lower()
     timeout_seconds = int(source.get("connection_timeout") or 60)
 
-    if scheme in {"mysql", "mariadb"}:
-        return mysql_connect(parsed_dsn, timeout_seconds)
-    if scheme in {"postgres", "postgresql"}:
-        return postgres_connect(parsed_dsn, timeout_seconds)
-    raise ValueError(f"Unsupported database scheme: {scheme or 'unknown'}")
-
-
-def parse_full_dsn(dsn: str) -> dict[str, str]:
-    """Parse DSN, including password, without printing credentials."""
-
-    parsed = parse_dsn(dsn)
-    if "://" not in dsn:
-        raise ValueError("Invalid DSN format.")
-
-    _scheme, remainder = dsn.split("://", 1)
-    authority = remainder.split("/", 1)[0]
-    if "@" in authority:
-        userinfo, _hostinfo = authority.rsplit("@", 1)
-        if ":" in userinfo:
-            _username, password = userinfo.split(":", 1)
-            parsed["password"] = password
-    return parsed
+    if engine in {"mysql", "mariadb"}:
+        return mysql_connect(source, timeout_seconds)
+    if engine in {"postgres", "postgresql"}:
+        return postgres_connect(source, timeout_seconds)
+    raise ValueError(f"Unsupported database engine: {engine or 'unknown'}")
 
 
 def execute_query(

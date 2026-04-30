@@ -6,7 +6,7 @@
 
 - **绝对只读安全**：严格执行安全契约，仅允许 `SELECT`, `SHOW`, `DESCRIBE` 和 `EXPLAIN` 等读操作。
 - **多引擎支持**：兼容 MySQL 和 PostgreSQL 数据库。
-- **统一配置管理**：利用 `dbhub.toml` 文件规范化管理多个数据库连接（DSN）。
+- **统一配置管理**：利用 `dbhub.properties` 文件规范化管理多个数据库连接。
 - **安全优先**：强制执行查询超时控制，并采用 Python 原生驱动执行（避免风险较大的 Shell CLI 方式）。
 - **主动洞察**：能够根据执行计划（Execution Plan）自动提供性能优化建议。
 
@@ -15,7 +15,7 @@
 ```text
 .
 ├── SKILL.md            # 核心技能定义与安全契约
-├── dbhub.toml.example  # 数据库连接标识模板
+├── dbhub.properties.example  # 数据库连接标识模板
 └── scripts/            # Python 实现脚本
     ├── sql_guard.py           # SQL 安全验证器
     ├── dbhub_sources.py       # 配置文件解析器
@@ -29,11 +29,14 @@
    ```bash
    pip install mysql-connector-python psycopg2-binary
    ```
-3. **配置数据库**：根据 `dbhub.toml.example` 创建 `dbhub.toml`：
-   ```toml
-   [[sources]]
-   id = "test"
-   dsn = "mysql://user:password@localhost:3306/my_db"
+3. **配置数据库**：根据 `dbhub.properties.example` 创建 `dbhub.properties`：
+   ```properties
+   db.test.engine=mysql
+   db.test.host=127.0.0.1
+   db.test.port=3306
+   db.test.database=my_db
+   db.test.username=readonly_user
+   db.test.password_env=DB_TEST_PASSWORD
    ```
 
 ## 使用说明
@@ -43,7 +46,7 @@
 ### 内部执行示例
 ```bash
 python scripts/run_readonly_query.py \
-  --dbhub-path dbhub.toml \
+  --dbhub-path dbhub.properties \
   --source-id test \
   --sql "SELECT * FROM users LIMIT 10"
 ```

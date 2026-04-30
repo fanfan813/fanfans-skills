@@ -1,0 +1,17 @@
+db.test.engine=mysql
+db.test.host=127.0.0.1
+db.test.port=3306
+db.test.database=app_test
+db.test.username=readonly_user
+db.test.password_env=DB_TEST_PASSWORD
+db.test.connection_timeout=30
+db.test.readonly=true
+
+db.prod.engine=postgresql
+db.prod.host=10.0.0.10
+db.prod.port=5432
+db.prod.database=app
+db.prod.username=readonly_prod
+db.prod.password_env=DB_PROD_PASSWORD
+db.prod.connection_timeout=15
+db.prod.readonly=true

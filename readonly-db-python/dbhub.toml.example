@@ -1,5 +1,0 @@
-# Define database sources
-[[sources]]
-id = "test"
-dsn = "mysql://username:password@host:port/database"
-connection_timeout = 60
